@@ -791,14 +791,14 @@ function updateUI(pageIndex) {
   const total = pageFlip.getPageCount();
   
   const isPortrait = (document.documentElement.clientWidth || window.innerWidth) < 768;
-  if (isPortrait || current === 0 || current === total - 1) {
+  if (isPortrait) {
     counter.textContent = `Page ${Math.min(current + 1, total)} of ${total}`;
   } else {
     counter.textContent = `Pages ${current + 1}-${Math.min(current + 2, total)} of ${total}`;
   }
   
   prevBtn.disabled = (current === 0);
-  nextBtn.disabled = (current === total - 1);
+  nextBtn.disabled = current >= total - (isPortrait ? 1 : 2);
 }
 
 // ── Button nav ──
@@ -842,7 +842,8 @@ function init() {
       minHeight: 260,
       maxHeight: 620,
       drawShadow: true,
-      showCover: true,
+      flippingTime: 900,
+      showCover: false,
       usePortrait: true,
       mobileScrollSupport: true,
       clickEventForward: false
