@@ -114,6 +114,8 @@ body::after {
 #book-wrap {
   position:relative;
   /* will be sized by JS */
+  transform-origin: center center;
+  touch-action: pan-y;
 }
 
 /* ── StPageFlip Book element ── */
@@ -320,21 +322,7 @@ body::after {
   transform: translateY(1px);
 }
 
-/* ── Music controls ── */
-#music-btn {
-  position:fixed;bottom:16px;right:16px;
-  z-index:30;
-  background:rgba(8,5,16,0.7);
-  border:1px solid rgba(212,168,67,0.3);
-  color:var(--gold);
-  width:36px;height:36px;border-radius:50%;
-  font-size:15px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  backdrop-filter:blur(6px);
-  transition:all 0.2s;
-  -webkit-tap-highlight-color:transparent;
-}
-#music-btn:hover{border-color:var(--gold);background:rgba(212,168,67,0.15);}
+
 
 /* ── Gold dust ── */
 .dust {
@@ -415,7 +403,7 @@ body::after {
   </div>
   <div id="counter">Page 1 of 4</div>
 </div>
-<button id="music-btn" title="Toggle music">♪</button>
+
 
 <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
 <script>
@@ -443,27 +431,60 @@ function getAudioCtx() {
   return audioCtx;
 }
 
+let pageSfxBuffer = null;
+let pageSfxSilenceOffset = 0;
+let isPreloading = false;
+
+function preloadPageSfx() {
+  if (isPreloading) return;
+  isPreloading = true;
+  try {
+    fetch('page-sfx.mp3')
+      .then(response => response.arrayBuffer())
+      .then(arrayBuffer => {
+        const ctx = getAudioCtx();
+        ctx.decodeAudioData(arrayBuffer, (decodedBuffer) => {
+          pageSfxBuffer = decodedBuffer;
+          
+          // Find the first sample above a threshold to cut leading silence
+          const channelData = decodedBuffer.getChannelData(0);
+          const threshold = 0.005;
+          let firstActiveSample = 0;
+          for (let i = 0; i < channelData.length; i++) {
+            if (Math.abs(channelData[i]) > threshold) {
+              firstActiveSample = i;
+              break;
+            }
+          }
+          pageSfxSilenceOffset = firstActiveSample / decodedBuffer.sampleRate;
+        }, (e) => {
+          console.warn("Failed to decode page-sfx.mp3:", e);
+          isPreloading = false;
+        });
+      })
+      .catch(e => {
+        console.warn("Failed to fetch page-sfx.mp3:", e);
+        isPreloading = false;
+      });
+  } catch(e) {
+    isPreloading = false;
+  }
+}
+
 function playPageTurnSound() {
   try {
     const ctx = getAudioCtx();
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.35, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    // Paper rustle: filtered white noise with quick decay
-    for (let i = 0; i < data.length; i++) {
-      const t = i / ctx.sampleRate;
-      const env = Math.exp(-t * 14) * (1 - Math.exp(-t * 80));
-      data[i] = (Math.random() * 2 - 1) * env * 0.55;
+    if (pageSfxBuffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = pageSfxBuffer;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.65;
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(0, pageSfxSilenceOffset);
+    } else {
+      preloadPageSfx();
     }
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const hpf = ctx.createBiquadFilter();
-    hpf.type = 'highpass'; hpf.frequency.value = 1200;
-    const lpf = ctx.createBiquadFilter();
-    lpf.type = 'lowpass'; lpf.frequency.value = 6000;
-    const gain = ctx.createGain();
-    gain.gain.value = 0.45;
-    src.connect(hpf); hpf.connect(lpf); lpf.connect(gain); gain.connect(ctx.destination);
-    src.start();
   } catch(e) {}
 }
 
@@ -476,7 +497,6 @@ function startMusic() {
     }
     bgAudio.play().then(() => {
       musicPlaying = true;
-      document.getElementById('music-btn').textContent = '♫';
     }).catch(e => {
       console.warn("Failed to play bg-audio.mp3:", e);
     });
@@ -488,12 +508,7 @@ function stopMusic() {
     try { bgAudio.pause(); } catch(e){}
   }
   musicPlaying = false;
-  document.getElementById('music-btn').textContent = '♪';
 }
-
-document.getElementById('music-btn').addEventListener('click', () => {
-  musicPlaying ? stopMusic() : startMusic();
-});
 
 // ─────────────────────────────────────────────
 //  STPAGEFLIP ENGINE & WEB INTERACTION
@@ -511,8 +526,232 @@ PAGES.forEach((src, idx) => {
   if (imgEl) imgEl.src = src;
 });
 
+// ── Zoom & Pan Implementation ──
+let scale = 1;
+let translateX = 0;
+let translateY = 0;
+let lastScale = 1;
+let lastTranslateX = 0;
+let lastTranslateY = 0;
+
+let isPinching = false;
+let isPanning = false;
+let isMouseDown = false;
+
+let startTouchDistance = 0;
+let startTouchScale = 1;
+let startTouchMidX = 0;
+let startTouchMidY = 0;
+let startPanX = 0;
+let startPanY = 0;
+let startMouseX = 0;
+let startMouseY = 0;
+let lastTapTime = 0;
+
+function zoomTo(targetScale, targetTx, targetTy, transition = true) {
+  scale = Math.max(1, Math.min(4, targetScale));
+  
+  const width = parseFloat(wrap.style.width) || wrap.clientWidth;
+  const height = parseFloat(wrap.style.height) || wrap.clientHeight;
+  
+  const maxTx = (scale - 1) * width / 2;
+  const maxTy = (scale - 1) * height / 2;
+  
+  translateX = Math.max(-maxTx, Math.min(maxTx, targetTx));
+  translateY = Math.max(-maxTy, Math.min(maxTy, targetTy));
+  
+  wrap.style.transition = transition ? 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)' : 'none';
+  wrap.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`;
+  wrap.style.touchAction = (scale > 1) ? 'none' : 'pan-y';
+}
+
+// Attach capturing-phase touch/mouse listeners to book-wrap to override StPageFlip defaults
+wrap.addEventListener('touchstart', (e) => {
+  if (scale > 1) {
+    e.stopPropagation();
+  }
+  
+  if (e.touches.length === 1) {
+    const now = Date.now();
+    if (now - lastTapTime < 300) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (scale > 1) {
+        zoomTo(1, 0, 0, true);
+      } else {
+        const rect = wrap.getBoundingClientRect();
+        const touchX = e.touches[0].clientX - rect.left - rect.width / 2;
+        const touchY = e.touches[0].clientY - rect.top - rect.height / 2;
+        const targetScale = 2.5;
+        zoomTo(targetScale, -touchX * targetScale, -touchY * targetScale, true);
+      }
+      lastTapTime = 0;
+      return;
+    }
+    lastTapTime = now;
+    
+    if (scale > 1) {
+      isPanning = true;
+      startPanX = e.touches[0].clientX - translateX;
+      startPanY = e.touches[0].clientY - translateY;
+      wrap.style.transition = 'none';
+    }
+  } else if (e.touches.length === 2) {
+    isPinching = true;
+    isPanning = false;
+    
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    
+    startTouchDistance = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    startTouchScale = scale;
+    
+    startTouchMidX = (t1.clientX + t2.clientX) / 2;
+    startTouchMidY = (t1.clientY + t2.clientY) / 2;
+    
+    lastTranslateX = translateX;
+    lastTranslateY = translateY;
+    
+    wrap.style.transition = 'none';
+  }
+}, { capture: true, passive: false });
+
+wrap.addEventListener('touchmove', (e) => {
+  if (scale > 1 || isPinching) {
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+  }
+  
+  if (isPinching && e.touches.length === 2) {
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    
+    const currentDistance = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    if (startTouchDistance > 0) {
+      const pinchScale = currentDistance / startTouchDistance;
+      const targetScale = startTouchScale * pinchScale;
+      
+      const currentMidX = (t1.clientX + t2.clientX) / 2;
+      const currentMidY = (t1.clientY + t2.clientY) / 2;
+      
+      const dx = currentMidX - startTouchMidX;
+      const dy = currentMidY - startTouchMidY;
+      
+      const targetTx = lastTranslateX * pinchScale + dx;
+      const targetTy = lastTranslateY * pinchScale + dy;
+      
+      zoomTo(targetScale, targetTx, targetTy, false);
+    }
+  } else if (isPanning && e.touches.length === 1) {
+    const targetTx = e.touches[0].clientX - startPanX;
+    const targetTy = e.touches[0].clientY - startPanY;
+    zoomTo(scale, targetTx, targetTy, false);
+  }
+}, { capture: true, passive: false });
+
+wrap.addEventListener('touchend', (e) => {
+  if (scale > 1) {
+    e.stopPropagation();
+  }
+  
+  if (isPinching) {
+    if (e.touches.length === 0) {
+      isPinching = false;
+      if (scale < 1.05) {
+        zoomTo(1, 0, 0, true);
+      } else {
+        zoomTo(scale, translateX, translateY, true);
+      }
+    } else if (e.touches.length === 1) {
+      isPinching = false;
+      isPanning = true;
+      startPanX = e.touches[0].clientX - translateX;
+      startPanY = e.touches[0].clientY - translateY;
+    }
+  } else if (isPanning) {
+    if (e.touches.length === 0) {
+      isPanning = false;
+      zoomTo(scale, translateX, translateY, true);
+    }
+  }
+}, { capture: true, passive: false });
+
+wrap.addEventListener('touchcancel', (e) => {
+  isPinching = false;
+  isPanning = false;
+  zoomTo(1, 0, 0, true);
+}, { capture: true });
+
+// Mouse events for desktop pan & zoom
+wrap.addEventListener('mousedown', (e) => {
+  if (scale > 1) {
+    e.stopPropagation();
+    e.preventDefault();
+    isMouseDown = true;
+    startMouseX = e.clientX - translateX;
+    startMouseY = e.clientY - translateY;
+    wrap.style.transition = 'none';
+  }
+}, { capture: true });
+
+window.addEventListener('mousemove', (e) => {
+  if (isMouseDown && scale > 1) {
+    e.stopPropagation();
+    e.preventDefault();
+    const targetTx = e.clientX - startMouseX;
+    const targetTy = e.clientY - startMouseY;
+    zoomTo(scale, targetTx, targetTy, false);
+  }
+}, { capture: true });
+
+window.addEventListener('mouseup', (e) => {
+  if (isMouseDown) {
+    isMouseDown = false;
+    e.stopPropagation();
+    zoomTo(scale, translateX, translateY, true);
+  }
+}, { capture: true });
+
+wrap.addEventListener('dblclick', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (scale > 1) {
+    zoomTo(1, 0, 0, true);
+  } else {
+    const rect = wrap.getBoundingClientRect();
+    const touchX = e.clientX - rect.left - rect.width / 2;
+    const touchY = e.clientY - rect.top - rect.height / 2;
+    const targetScale = 2.5;
+    zoomTo(targetScale, -touchX * targetScale, -touchY * targetScale, true);
+  }
+}, { capture: true });
+
+wrap.addEventListener('wheel', (e) => {
+  if (e.ctrlKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = wrap.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left - rect.width / 2;
+    const mouseY = e.clientY - rect.top - rect.height / 2;
+    
+    const zoomFactor = 1.1;
+    let targetScale = scale;
+    if (e.deltaY < 0) {
+      targetScale *= zoomFactor;
+    } else {
+      targetScale /= zoomFactor;
+    }
+    
+    const targetTx = mouseX - (mouseX - translateX) * (targetScale / scale);
+    const targetTy = mouseY - (mouseY - translateY) * (targetScale / scale);
+    
+    zoomTo(targetScale, targetTx, targetTy, false);
+  }
+}, { passive: false, capture: true });
+
 // Dynamic resizing logic for book container
 function resizeBook() {
+  zoomTo(1, 0, 0, false);
   const headH = 150;
   const counterH = 120;
   const maxBookHeight = window.innerHeight - headH - counterH - 40;
@@ -684,6 +923,7 @@ document.addEventListener('DOMContentLoaded', () => {
     openBtn.addEventListener('click', () => {
       modal.classList.add('hidden');
       startMusic();
+      preloadPageSfx();
     });
   }
 });
