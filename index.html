@@ -870,34 +870,8 @@ function init() {
       updateUI();
     });
     
-    // Add pointer events for tap/click to turn pages
-    let pointerStartX = 0;
-    let pointerStartY = 0;
-    
-    bookElement.addEventListener('pointerdown', (e) => {
-      pointerStartX = e.clientX;
-      pointerStartY = e.clientY;
-    }, true);
-    
-    bookElement.addEventListener('pointerup', (e) => {
-      const moveX = Math.abs(e.clientX - pointerStartX);
-      const moveY = Math.abs(e.clientY - pointerStartY);
-      
-      // Only trigger if it was a quick tap/click, not a drag swipe
-      if (moveX < 10 && moveY < 10) {
-        const rect = bookElement.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const current = pageFlip.getCurrentPageIndex();
-        const total = pageFlip.getPageCount();
-        if (x > rect.width * 0.5) {
-          pageFlip.flipNext();
-          setTimeout(updateUI, 80);
-        } else {
-          pageFlip.flipPrev();
-          setTimeout(updateUI, 80);
-        }
-      }
-    }, true);
+    // NOTE: Tap-to-flip is handled natively by the StPageFlip library.
+    // No custom pointer listeners needed here — adding them caused double-flip.
   } catch (err) {
     console.error("Failed to initialize StPageFlip library:", err);
   }
