@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive PDF Hub & Viewer</title>
+    <!-- Modern Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Design Tokens & Reset */
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-focus: rgba(255, 255, 255, 0.15);
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --primary-glow: rgba(99, 102, 241, 0.3);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #10b981;
+            --sidebar-width: 320px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* App Layout */
+        .app-container {
+            display: flex;
+            width: 100%;
+            height: 100vh;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-right: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            padding: 2rem 1.5rem;
+            z-index: 10;
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            box-shadow: 0 0 15px var(--primary-glow);
+        }
+
+        .logo-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin: 1.5rem 0 0.75rem 0;
+            font-weight: 600;
+        }
+
+        /* Custom File Input */
+        .file-upload-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: var(--glass-bg);
+            border: 1px dashed var(--glass-border);
+            padding: 0.75rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: var(--text-main);
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+
+        .file-upload-btn:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
+        }
+
+        .file-upload-btn input {
+            display: none;
+        }
+
+        /* Quick Load Input */
+        .url-input-container {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .url-input {
+            flex: 1;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            padding: 0.75rem;
+            border-radius: 8px;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .url-input:focus {
+            border-color: var(--primary);
+            background: var(--glass-focus);
+        }
+
+        .url-btn {
+            background: var(--primary);
+            border: none;
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+
+        .url-btn:hover {
+            background: var(--primary-hover);
+            box-shadow: 0 0 12px var(--primary-glow);
+        }
+
+        /* PDF Playlist / Items */
+        .pdf-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            overflow-y: auto;
+            flex: 1;
+            margin-right: -0.5rem;
+            padding-right: 0.5rem;
+        }
+
+        .pdf-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            cursor: pointer;
+            background: transparent;
+            border: 1px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .pdf-item:hover {
+            background: var(--glass-bg);
+            border-color: var(--glass-border);
+        }
+
+        .pdf-item.active {
+            background: rgba(99, 102, 241, 0.15);
+            border-color: var(--primary);
+            box-shadow: inset 0 0 10px rgba(99, 102, 241, 0.1);
+        }
+
+        .pdf-icon {
+            font-size: 1.25rem;
+        }
+
+        .pdf-details {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .pdf-name {
+            font-size: 0.9rem;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .pdf-source {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Main Viewer Area */
+        .viewer-container {
+            flex: 1;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: rgba(10, 10, 18, 0.4);
+            position: relative;
+        }
+
+        .viewer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--glass-border);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            background: rgba(15, 23, 42, 0.3);
+        }
+
+        .current-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .current-path {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .viewer-frame-wrapper {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Empty State */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+            gap: 1.5rem;
+            z-index: 1;
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            animation: float 4s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .empty-text h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .empty-text p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            max-width: 400px;
+            line-height: 1.5;
+        }
+
+        /* The PDF iframe */
+        .pdf-viewer {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+            z-index: 2;
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: rgba(16, 185, 129, 0.9);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 100;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Controls -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <div class="logo-icon">PDF</div>
+                <div class="logo-title">GlassViewer</div>
+            </div>
+
+            <div class="section-title">Load document</div>
+            
+            <!-- Method 1: Local File Selection -->
+            <label class="file-upload-btn">
+                <span>📁 Upload local PDF</span>
+                <input type="file" id="local-file-picker" accept="application/pdf">
+            </label>
+
+            <!-- Method 2: Path/URL Input -->
+            <div class="url-input-container">
+                <input type="text" class="url-input" id="url-loader" placeholder="Enter PDF path or URL...">
+                <button class="url-btn" id="url-btn">Load</button>
+            </div>
+
+            <div class="section-title">Presets & History</div>
+            
+            <!-- Quick links sidebar (Method 3: Configure presets here) -->
+            <ul class="pdf-list" id="pdf-playlist">
+                <!-- Items populated by JS -->
+            </ul>
+        </aside>
+
+        <!-- Main Viewer Content -->
+        <main class="viewer-container">
+            <header class="viewer-header">
+                <div>
+                    <h1 class="current-title" id="current-title">No document loaded</h1>
+                    <p class="current-path" id="current-path">Select or enter a PDF file to begin</p>
+                </div>
+            </header>
+
+            <div class="viewer-frame-wrapper">
+                <!-- Empty State -->
+                <div class="empty-state" id="empty-state">
+                    <div class="empty-icon">📄</div>
+                    <div class="empty-text">
+                        <h2>Start Reading</h2>
+                        <p>Open a local PDF file, enter a relative/absolute path, or pass <code>?file=your_document.pdf</code> in the browser's address bar.</p>
+                    </div>
+                </div>
+
+                <!-- PDF frame -->
+                <iframe class="pdf-viewer" id="pdf-iframe" title="PDF Document Viewer"></iframe>
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification toast -->
+    <div class="toast" id="toast">Loaded successfully!</div>
+
+    <script>
+        // --- 1. CONFIGURATION: Presets (How to specify predefined PDFs) ---
+        // Edit this list to specify pre-configured PDF files in the sidebar
+        const PDF_PRESETS = [
+            { name: "Sample Document", path: "sample.pdf", description: "Default sample PDF" },
+            { name: "Project Requirements", path: "docs/requirements.pdf", description: "Project specifications" },
+            { name: "User Guide", path: "docs/guide.pdf", description: "System handbook" }
+        ];
+
+        // --- 2. DOM Elements ---
+        const iframe = document.getElementById('pdf-iframe');
+        const emptyState = document.getElementById('empty-state');
+        const currentTitle = document.getElementById('current-title');
+        const currentPath = document.getElementById('current-path');
+        const filePicker = document.getElementById('local-file-picker');
+        const urlLoader = document.getElementById('url-loader');
+        const urlBtn = document.getElementById('url-btn');
+        const pdfPlaylist = document.getElementById('pdf-playlist');
+        const toast = document.getElementById('toast');
+
+        // --- 3. View Logic ---
+        function loadPDF(path, name = '') {
+            if (!path) return;
+
+            // Update UI
+            iframe.style.display = 'block';
+            emptyState.style.display = 'none';
+            
+            const displayName = name || path.split('/').pop() || 'Loaded Document';
+            currentTitle.textContent = displayName;
+            currentPath.textContent = path;
+            
+            // Set the iframe src.
+            // Note: Modern browsers security may block file:// URLs. Running a local dev server (e.g. npx http-server) resolves this.
+            iframe.src = path;
+            
+            // Update active preset class
+            document.querySelectorAll('.pdf-item').forEach(item => {
+                if (item.getAttribute('data-path') === path) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+
+            showToast(`Loading: ${displayName}`);
+        }
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // --- 4. Interactive Events ---
+
+        // File picker (Local PDFs)
+        filePicker.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                const objectURL = URL.createObjectURL(file);
+                loadPDF(objectURL, file.name);
+            } else {
+                alert('Please select a valid PDF file.');
+            }
+        });
+
+        // URL loader input
+        urlBtn.addEventListener('click', () => {
+            const urlVal = urlLoader.value.trim();
+            if (urlVal) {
+                loadPDF(urlVal);
+            }
+        });
+        urlLoader.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const urlVal = urlLoader.value.trim();
+                if (urlVal) loadPDF(urlVal);
+            }
+        });
+
+        // Populate Presets in sidebar
+        function initPresets() {
+            pdfPlaylist.innerHTML = '';
+            PDF_PRESETS.forEach(preset => {
+                const li = document.createElement('li');
+                li.className = 'pdf-item';
+                li.setAttribute('data-path', preset.path);
+                li.innerHTML = `
+                    <span class="pdf-icon">📕</span>
+                    <div class="pdf-details">
+                        <span class="pdf-name">${preset.name}</span>
+                        <span class="pdf-source">${preset.description || preset.path}</span>
+                    </div>
+                `;
+                li.addEventListener('click', () => {
+                    loadPDF(preset.path, preset.name);
+                });
+                pdfPlaylist.appendChild(li);
+            });
+        }
+
+        // --- 5. URL Parameter Parsing (Method C) ---
+        // Checks if index.html?file=somefile.pdf is set
+        function checkUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            const fileUrl = params.get('file') || params.get('pdf');
+            if (fileUrl) {
+                loadPDF(decodeURIComponent(fileUrl));
+            }
+        }
+
+        // Initialize App
+        initPresets();
+        checkUrlParams();
+    </script>
+</body>
+</html>
