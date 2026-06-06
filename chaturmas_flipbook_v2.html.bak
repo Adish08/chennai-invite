@@ -17,20 +17,12 @@
 }
 
 html,body {
-  width:100%;
-  min-height:100%;
+  width:100%;height:100%;
   background: var(--deep);
   overflow:hidden;
   font-family:'Cormorant Garamond',serif;
-  touch-action:manipulation;
+  touch-action:none;
   cursor:default;
-}
-html {
-  height:100%;
-}
-body {
-  min-height:100vh;
-  min-height:100dvh;
 }
 body {
   display: flex;
@@ -110,15 +102,12 @@ body::after {
 /* ── Stage ── */
 #stage {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1;
-  overflow: hidden;
-  padding: 8px 12px 12px;
 }
 
 /* ── Book container ── */
@@ -127,9 +116,6 @@ body::after {
   /* will be sized by JS */
   transform-origin: center center;
   touch-action: pan-y;
-  flex: 0 0 auto;
-  max-width: calc(100vw - 24px);
-  max-height: 100%;
 }
 
 /* ── StPageFlip Book element ── */
@@ -338,6 +324,19 @@ body::after {
 
 
 
+/* ── Gold dust ── */
+.dust {
+  position:fixed;pointer-events:none;z-index:0;
+  border-radius:50%;
+  background:rgba(212,168,67,0.15);
+  animation:drift linear infinite;
+}
+@keyframes drift {
+  0%{transform:translateY(100vh) rotate(0deg);opacity:0;}
+  10%{opacity:1;}
+  90%{opacity:0.3;}
+  100%{transform:translateY(-10vh) rotate(360deg);opacity:0;}
+}
 </style>
 </head>
 <body>
@@ -753,29 +752,17 @@ wrap.addEventListener('wheel', (e) => {
 // Dynamic resizing logic for book container
 function resizeBook() {
   zoomTo(1, 0, 0, false);
-  const heading = document.getElementById('heading');
-  const controls = document.getElementById('controls-container');
-  const verticalChrome = (heading?.offsetHeight || 0) + (controls?.offsetHeight || 0);
-  const viewportW = document.documentElement.clientWidth || window.innerWidth;
-  const viewportH = window.visualViewport?.height || window.innerHeight;
-  const isMobile = viewportW < 768;
-  const stagePadding = isMobile ? 24 : 48;
-  const availableW = Math.max(260, viewportW - stagePadding);
-  const availableH = Math.max(260, viewportH - verticalChrome - stagePadding);
-
-  let bookW;
-  let bookH;
-  if (isMobile) {
-    // Portrait mode shows one square page, so it must be constrained by viewport width first.
-    const side = Math.min(availableW, availableH, 620);
-    bookW = side;
-    bookH = side;
-  } else {
-    const spreadH = Math.min(availableH, availableW / 2, 620);
-    bookW = spreadH * 2;
-    bookH = spreadH;
-  }
-
+  const headH = 150;
+  const counterH = 120;
+  const maxBookHeight = window.innerHeight - headH - counterH - 40;
+  
+  // Double page spread: 2:1 ratio (on both desktop and mobile to ensure curling page turn animation)
+  const isMobile = window.innerWidth < 768;
+  const scaleFactor = isMobile ? 0.48 : 0.45;
+  const availableHeight = Math.min(maxBookHeight, window.innerWidth * scaleFactor);
+  const bookW = availableHeight * 2;
+  const bookH = availableHeight;
+  
   wrap.style.width = Math.floor(bookW) + 'px';
   wrap.style.height = Math.floor(bookH) + 'px';
   
@@ -790,11 +777,17 @@ function updateUI(pageIndex) {
   const current = (pageIndex !== undefined) ? pageIndex : pageFlip.getCurrentPageIndex();
   const total = pageFlip.getPageCount();
   
-  const isPortrait = (document.documentElement.clientWidth || window.innerWidth) < 768;
-  if (isPortrait || current === 0 || current === total - 1) {
-    counter.textContent = `Page ${Math.min(current + 1, total)} of ${total}`;
+  // Since usePortrait is false, StPageFlip is always in landscape (spread) mode.
+  // pageFlip.getCurrentPageIndex() returns:
+  // - 0 for the cover (only page 1 is shown on the right side)
+  // - 1 for the first spread (pages 2 and 3 are shown side-by-side)
+  // - 3 for the back cover (only page 4 is shown on the left side)
+  if (current === 0) {
+    counter.textContent = `Page 1 of ${total}`;
+  } else if (current === total - 1) {
+    counter.textContent = `Page ${total} of ${total}`;
   } else {
-    counter.textContent = `Pages ${current + 1}-${Math.min(current + 2, total)} of ${total}`;
+    counter.textContent = `Pages ${current + 1}-${current + 2} of ${total}`;
   }
   
   prevBtn.disabled = (current === 0);
@@ -826,6 +819,17 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ── Ambient gold dust particles ──
+(function spawnDust() {
+  const d = document.createElement('div');
+  d.className = 'dust';
+  const s = 1.5 + Math.random()*3.5;
+  d.style.cssText = `width:${s}px;height:${s}px;left:${Math.random()*100}vw;animation-duration:${10+Math.random()*14}s;animation-delay:${Math.random()*4}s`;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 26000);
+  setTimeout(spawnDust, 700 + Math.random()*900);
+})();
+
 // Initialize Book Flip and Page Click Handlers
 function init() {
   resizeBook();
@@ -837,13 +841,13 @@ function init() {
       width: 600,
       height: 600,
       size: "stretch",
-      minWidth: 260,
-      maxWidth: 1240,
-      minHeight: 260,
-      maxHeight: 620,
+      minWidth: 250,
+      maxWidth: 600,
+      minHeight: 250,
+      maxHeight: 600,
       drawShadow: true,
       showCover: true,
-      usePortrait: true,
+      usePortrait: false,
       mobileScrollSupport: true,
       clickEventForward: false
     });
@@ -916,17 +920,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-let resizeTimer = null;
 window.addEventListener('resize', () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(resizeBook, 80);
+  resizeBook();
 });
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(resizeBook, 80);
-  });
-}
 
 // Fire initialization when safe
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
