@@ -492,14 +492,14 @@ function playPageTurnSound() {
 function startMusic() {
   try {
     if (!bgAudio) {
-      bgAudio = new Audio('bg-audio.mp3');
+      bgAudio = new Audio('Sadbhagya%20Chaturmas%20Pravesh%20Song.m4a');
       bgAudio.loop = true;
-      bgAudio.volume = 0.55;
+      bgAudio.volume = 0.495; // original 0.55 reduced by 10%
     }
     bgAudio.play().then(() => {
       musicPlaying = true;
     }).catch(e => {
-      console.warn("Failed to play bg-audio.mp3:", e);
+      console.warn("Failed to play Sadbhagya Chaturmas Pravesh Song.m4a:", e);
     });
   } catch(e) { console.warn(e); }
 }
