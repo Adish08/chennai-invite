@@ -25,16 +25,7 @@
     </style>
     <script>
         (function () {
-            const cleanHost = window.location.hostname || 'localhost';
-            // Strip view.html, index.html, and trailing slashes to keep the tracker key consistent
-            const cleanPath = window.location.pathname
-                .replace(/\/view\.html$/, '')
-                .replace(/\/index\.html$/, '')
-                .replace(/\/$/, '') || '';
-
-            const trackerKey = (cleanHost + cleanPath).replace(/[^a-zA-Z0-9.-]/g, '_');
-            const dashboardUrl = `https://hits.sh/chaturmas-pravesh-${trackerKey}/`;
-
+            const dashboardUrl = "https://hits.sh/chaturmas-pravesh-adish08.github.io_chennai-chaturmas-aamantran-patrika-2026/";
             // Perform redirect immediately
             window.location.replace(dashboardUrl);
         })();
@@ -44,19 +35,8 @@
 <body>
     <div>
         <p>Redirecting to hits.sh analytics dashboard...</p>
-        <p><a id="fallback-link" href="#">Click here if you are not redirected automatically</a></p>
+        <p><a id="fallback-link" href="https://hits.sh/chaturmas-pravesh-adish08.github.io_chennai-chaturmas-aamantran-patrika-2026/">Click here if you are not redirected automatically</a></p>
     </div>
-    <script>
-        (function () {
-            const cleanHost = window.location.hostname || 'localhost';
-            const cleanPath = window.location.pathname
-                .replace(/\/view\.html$/, '')
-                .replace(/\/index\.html$/, '')
-                .replace(/\/$/, '') || '';
-            const trackerKey = (cleanHost + cleanPath).replace(/[^a-zA-Z0-9.-]/g, '_');
-            document.getElementById('fallback-link').href = `https://hits.sh/chaturmas-pravesh-${trackerKey}/`;
-        })();
-    </script>
 </body>
 
 </html>
